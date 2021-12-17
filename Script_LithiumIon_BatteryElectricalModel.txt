@@ -1,0 +1,93 @@
+function [SocTotal,CorrenteVar,PowerDC,TensaoTot,CapacidadeTotalAh,CapacidadeTWh] = LiElectricalModel(step,soc,IcommB,PCommB,Qah,Qwh)
+
+%Where, for each of the value time step Inputs:
+%step - is the timing step of the data, in seconds
+%soc - is the current state of charge of the battery, in %
+%IcommB - is the current current, in A
+%PcommB - is the current power, in W
+%Qah - is the calculated energy capacity of the battery, in Ah
+%Qwh - is the calculated energy capacity of the battery, in Wh
+
+Ecapacity=135; %Useful Energy capacity Ah
+X=41.2; %Adjustment Voltage
+for x=1
+    if (ICommB>0) %For the discharge state description
+        Vf=60.9; %Model point voltage (extracted from curve), in V
+        Ve=57.35; %Model point voltage (extracted from curve), in V
+        Vn=52.6; %Model point voltage (extracted from curve), in V
+        Y=7.55e-14*(PCommB^4)-6.58e-10*(PCommB^3)+1.94e-6*(PCommB^2)-0.0026*PCommB+2.284; %Calculated fitting for adjusment curve to other power levels
+        Z=2652*(PCommB^-0.771)-5.282; %Calculated fitting for adjusment curve to other power levels
+        nexp=0.77; %Ratio multiplied by Qexp for adjusment curve
+        nnom=0.98; %Ratio multiplied by Qexp for adjusment curve
+        Vfull=Vf+Y; %Value of Vfull for each of the power curve, V
+        Vexp=Ve+Y; %Value of Vexp for each of the power curve, V
+        Vnom=Vn+Y; %Value of Vnom for each of the power curve, V
+        Qfull=(169-Z); %Value of Qfull for each of the power curve, Ah
+        Qexp=(Qfull-Z)*nexp; %Value of Qexp for each of the power curve, Ah
+        Qnom=(Qfull-Z)*nnom; %Value of Qnom for each of the power curve, Ah
+        A=Vfull-Vexp; %Exponential Voltage Amplitude Constant in V
+        B=2.3/Qexp; %Exponential Voltage Amplitude Constant in V
+        K=7.3*(Vfull-Vnom+A*(exp(-B*Qnom)-1))*((Qfull-Qnom)/Qnom); %Polarization Constant, V/Ah
+        R=Vnom*(1-0.8)/(1*Qnom); %Internal Resistance, in Ω
+        corrente=IcommB; %Input current, in A
+        Ezero=Vfull+K+R*corrente-A+X; %Battery Constant Voltage, in V
+        it=abs(corrente)*step*0.87; %Discharged energy, Ah
+        TensaoTotal=Ezero-K*(Qah/(Qah-it))*(corrente+it)+A*(exp(-B*it))-R*corrente; %Voltage, V
+        Captot=Qah-corrente*step; %Energy Capacity, Ah
+        Energy=((PCommB*step))/Ecapacity; %Auxiliar calculus, W
+        SocIc=soc-Energy; %State of charge of the battery, %
+        Potencia=(corrente)*TensaoTotal; %Power Discharged, W
+        Int=Qwh-PCommB*(step)/Ecapacity; %Energy Capacity, Wh
+    elseif (PCommB==0) %Seen as a discharge = standby of inverter and auxiliaries
+	Energy=((5*step))/Ecapacity; %Auxiliar calculus, W
+        SocIc=soc-Energy; %State of charge of the battery, %
+        corrente=IcommB; %Input current, in A
+        TensaoTotal=TensaoTotal; %~Same as in previous iteration, in V
+	Potencia=(corrente)*TensaoTotal; %Power discharged, W
+        Int=Qwh-PCommB*(step)/Ecapacity; %Energy Capacity, Wh
+        Captot=Qah-corrente*step; %Energy Capacity, Ah
+    else %For the discharge state description
+        Vf=60.9; %Model point voltage (extracted from curve), V
+        Ve=58.5; %Model point voltage (extracted from curve), V
+        Vn=54.6; %Model point voltage (extracted from curve), V
+        Y=0.;%Calculated fitting for adjusment curve
+        Z=abs(7760*(-PCommB^(-0.9554))-3.493); %Calculated fitting for adjusment curve
+        nexp=0.6; %Ratio multiplied by Qexp for adjusment curve
+        nnom=0.98; %Ratio multiplied by Qexp for adjusment curve
+        Vfull=Vf+Y; %Value of Vfull for each of the power curve, V
+        Vexp=Ve+Y; %Value of Vexp for each of the power curve, V
+        Vnom=Vn+Y; %Value of Vnom for each of the power curve, V
+        Qfull=(169-Z); %Value of Qfull for each of the power curve, Ah
+        Qexp=(Qfull-Z)*nexp; %Value of Qexp for each of the power curve, Ah
+        Qnom=(Qfull-Z)*nnom; %Value of Qnom for each of the power curve, Ah
+        A=Vfull-Vexp; %Exponential Voltage Amplitude Constant in V
+        B=2.3/Qexp; %Exponential Voltage Amplitude Constant in V
+        K=7.3*(Vfull-Vnom+A*(exp(-B*Qnom)-1))*((Qfull-Qnom)/Qnom);
+        R=Vnom*(1-0.8)/(1*Qnom); %Polarization Constant, V/Ah
+        corrente=IcommB; %Input current, A
+        Ezero=Vfull+K+R*corrente-A+X; %Battery Constant Voltage, in V
+        it=abs(corrente)*step*0.5; %Charged energy, Ah
+        TensaoTotal=Ezero+K*(Qah/(it-0.65*Qah))*(abs(corrente)+it)+A*(exp(-B*it))-R*corrente; %Voltage, V
+        Captot=Qah-corrente*step; %Energy Capacity, Ah
+        Int=Qwh-PCommB*(step)/Ecapacity; %Energy Capacity, Wh
+        Energy=((PCommB*step))/Ecapacity; %Auxiliar calculus, W
+        SocIc=soc-Energy; %State of charge of the battery, %
+        Potencia=corrente*TensaoTotal; %Power charged, W
+    end
+    %Variables atribution
+    Qah=Captot;
+    CapA=Qah;
+    Qwh=Int;
+    CapW=Qwh;
+    soc=SocIc;
+    S=soc;
+    %Outputs:
+    TensaoTot=TensaoTotal; %Output
+    CapacidadeTotalAh=CapA; %Output
+    CapacidadeTWh=CapW; %Output
+    CorrenteVar=corrente; %Output
+    PowerDC=Potencia; %Output
+    SocTotal=S; %Output
+end
+
+end
